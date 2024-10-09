@@ -1,8 +1,5 @@
-import shutil
 import math  
 
-
-shutil.copyfile('answerlistcopy','answerlist')
 
 setWord = "hello"
 
