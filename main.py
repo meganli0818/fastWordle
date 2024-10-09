@@ -1,131 +1,130 @@
 import math  
 
-
 setWord = "hello"
 
+# Load the wordlists from files
 my_file = open("wordlist")
-all_words = my_file.readlines() # now we can just treat the entire file as a list of strings named all_words
+all_words = my_file.readlines() # List of all possible guesses
 my_file.close()
 
 my_file = open("answerlist")
-word_list = my_file.readlines() # now we can just treat the entire file as a list of strings named word_list
+word_list = my_file.readlines() # List of all possible answers
 my_file.close()
 
-NAnswers = len(word_list) #2309
+NAnswers = len(word_list) # Total number of possible answers (2309)
 
-possible = [] # Initialize to answerlist
-guessNumber = 0 # number of words guessed so far. If its 6 and the word isn't guessed then the game ends
+possible = [] # Tracks remaining possible answers
+guessNumber = 0 # Number of guesses made so far
 
 
-#given answer word 1, find the pattern in word 2
-def patternMatrix(words2, words1): 
-    # find the number 0 to 3^5-1 corresponding to the pattern between two words. base 3: 0 = gray, 1 = yellow, 2 = green
-
-  currentGuess1 = 0 # the number between 0 and 3^5-1 of the current guess
-  currentGuess2 = 0
+# Computes the pattern between two words as a base-3 number (0=gray, 1=yellow, 2=green)
+def patternMatrix(guess, answer): 
+    currentGuess1, currentGuess2 = 0, 0
   
-  for element in range(5): # iterating through each letter of the input word    
-    if words2[element] == words1[element]: # if the letter in input word and answer word are same in same position, set that position to 2
-      currentGuess1+=2
-      words1 = words1[:element] + '.' + words1[(element+1):] # set the position in the answer word to '.' so that it is not double counted in case the input word has 1 letter twice when the answer word only has it once
-      words2 = words2[:element] + ',' + words2[(element+1):]
-    currentGuess1 *= 3
-    
-  for element in range(5): 
-    for i in range(5): # iterating through each letter of the answer word
-      if words2[element] == words1[i]: # if the letter in the input word is in the answer word, set the position of the letter from the input word to 1 
-        currentGuess2+=1
-        words1 = words1[:i] + '.' + words1[(i+1):] # set the position in the answer word to '.' so that it is not double counted in case the input word has 1 letter twice when the answer word only has it once
-        words2 = words2[:element] + ',' + words2[(element+1):]
-        
-    currentGuess2*=3 # "sll" but in base 3
-  currentGuess = currentGuess1 + currentGuess2
-  currentGuess/=3
-  return (int)(currentGuess)
+    # First pass: mark green positions and update both words to avoid double counting
+    for element in range(5):
+        if guess[element] == answer[element]: 
+            currentGuess1 += 2
+            answer = answer[:element] + '.' + answer[element+1:]
+            guess = guess[:element] + ',' + guess[element+1:]
+        currentGuess1 *= 3
+
+    # Second pass: mark yellow positions
+    for element in range(5):
+        for i in range(5):
+            if guess[element] == answer[i]:
+                currentGuess2 += 1
+                answer = answer[:i] + '.' + answer[i+1:]
+                guess = guess[:element] + ',' + guess[element+1:]
+        currentGuess2 *= 3
+
+    # Combine the two results and return the final pattern number
+    currentGuess = (currentGuess1 + currentGuess2) // 3
+    return int(currentGuess)
 
 
-
-
+# Finds the next best guess based on entropy calculations
 def getNextGuess(): 
-  # Loop through all 12k possible guesses. For each, loop through currentPossible and compute pattern matrix number for each. If a pattern n is reached, do pattern[n]++. Then, compute entropy using the pattern matrix. Return the highest entropy word.
-  global guessNumber
-  global possible
-  if guessNumber==0:
-    return 9490 # salet
-  entropyMaxI = 0
-  entropyMax = 0
-  
-  NLeft = len(possible)
-  if(NLeft==1):
-    return all_words.index(word_list[possible[0]])
-  if(NLeft==2):
-    return all_words.index(word_list[possible[0]])
-  
-  for i in range(len(all_words)):
-    pattern = [0 for x in range(243)]
-    for j in range(NLeft):
-      pattern[patternMatrix(all_words[i], word_list[possible[j]])]+=1
-      
-    entropy = 0
-    for j in range(243):
-      if(pattern[j]!=0):
-        entropy -= pattern[j]*math.log2(pattern[j]/NLeft)/NLeft
+    global guessNumber, possible
     
-    if(entropyMax<entropy):
-      entropyMaxI = i
-      entropyMax = entropy
-    if(entropyMax==entropy and (all_words[i] in word_list) and (word_list.index(all_words[i]) in possible)):
-      entropyMaxI = i
-  return entropyMaxI
+    if guessNumber == 0:
+        return 9490 # 'salet' is a common first guess
+
+    entropyMaxI = 0
+    entropyMax = 0
+    NLeft = len(possible)
+
+    if NLeft <= 2:
+        return all_words.index(word_list[possible[0]])
+
+    # Loop through all possible guesses and compute entropy
+    for i in range(len(all_words)):
+        pattern = [0] * 243
+        for j in range(NLeft):
+            pattern[patternMatrix(all_words[i], word_list[possible[j]])] += 1
+      
+        # Calculate entropy for this guess
+        entropy = 0
+        for count in pattern:
+            if count != 0:
+                entropy -= count * math.log2(count / NLeft) / NLeft
+        
+        # Update max entropy guess
+        if entropy > entropyMax:
+            entropyMaxI = i
+            entropyMax = entropy
+        elif entropy == entropyMax and all_words[i] in word_list and word_list.index(all_words[i]) in possible:
+            entropyMaxI = i
+            
+    return entropyMaxI
 
 
-
+# Updates the list of possible answers based on the pattern result
 def updateCurrentPossible(nextWord, matrixVal): 
-  # determine all possible answers at this point. Loop through the current all possible list and then get rid of the inconsistent ones 
-  global possible
-  i=0
-  while(i<len(possible)):
-    if patternMatrix(all_words[nextWord], word_list[possible[i]]) != matrixVal:
-      possible.pop(i)
-      i-=1
-    i+=1
-  return
+    global possible
+    i = 0
+    while i < len(possible):
+        if patternMatrix(all_words[nextWord], word_list[possible[i]]) != matrixVal:
+            possible.pop(i)
+            i -= 1
+        i += 1
 
 
+# Prompts the user to enter the feedback pattern (B=gray, Y=yellow, G=green) and converts it to a matrix value
 def enterPattern(word):
-  # ask user to enter BYG and then convert into a number and return it.
-  matrixValue = 0
+    matrixValue = 0
+    print(f"Enter {word.strip()} for your next guess. Then, type the color pattern you get back, with 5 letters (B, Y, or G).")
+    matrix = input()
 
-  print("Enter " + word[0] + word[1] +word[2] +word[3] +word[4]+""" for your next guess. Then, type the color pattern you get back, with 5 letters (B, Y, or G).\n""")
-  matrix = input();
-
-  for i in matrix:
-    if i == 'G':
-      matrixValue += 2
-    elif i == 'Y':
-      matrixValue +=1
-    matrixValue *= 3
-  matrixValue = (int)(matrixValue/3)
-  return matrixValue
+    for i in matrix:
+        if i == 'G':
+            matrixValue += 2
+        elif i == 'Y':
+            matrixValue += 1
+        matrixValue *= 3
+    matrixValue = int(matrixValue // 3)
+    
+    return matrixValue
   
 
+# Main game loop: guesses words until the correct answer is found
 def main():  
-  global possible
-  global NAnswers
-  global guessNumber
-  global setWord
+    global possible, NAnswers, guessNumber, setWord
   
-  possible = list(range(NAnswers))
-  guessNumber = 0
-  p = 0
-  while(p!=242):
-    nextWord = getNextGuess()
-    txt = all_words[nextWord].replace('\n', '')
-    guessNumber+=1
-    print("Guess #" + str(guessNumber) + ": " + txt)
-    p = enterPattern(all_words[nextWord])
-    updateCurrentPossible(nextWord, p)
-    print()
-  print("\nHooray.")
+    possible = list(range(NAnswers))  # Start with all possible answers
+    guessNumber = 0
+    p = 0
+
+    # Loop until the correct answer (all green = 242) is found
+    while p != 242:
+        nextWord = getNextGuess()
+        txt = all_words[nextWord].strip()
+        guessNumber += 1
+        print(f"Guess #{guessNumber}: {txt}")
+        p = enterPattern(all_words[nextWord])
+        updateCurrentPossible(nextWord, p)
+        print()
+
+    print("\nYou guessed the word!")
 
 main()
